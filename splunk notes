@@ -1,0 +1,183 @@
+More than 90% data are stored as machine data, but they are not always structured.
+
+splunk: input, parsing, indexing, searching
+
+错误的： In most splunk deployments, [forwarders] serve as the primary way data is supplied for indexing
+
+Search data are processed by [indexers]
+
+Search strings are sent from the [search heads]
+
+cd /Applications/splunk/bin
+
+./splunk start or stop or restart or help
+
+
+Splunk Cloud
+
+admin role install & create knowledge objects for users of the app and do realtime searches
+power role create and share knowledge objects for users of the app and do realtime searches
+user role 
+
+
+U can launch and manage apps from the home app
+
+upload(for data created once and never modified)
+ 实际不用 但是很适合test or small dataset
+monitor 
+forward(从外界的数据来) -> index data
+
+host file value - instance name
+
+module 4
+index: most data are stored
+但不应该全部存在main index 但这不应该
+1. 分开搜索效率提高
+2. 可以方便设置权限 by user role
+3. 不同index的保存时间可以设置的不同
+web data index
+security index
+
+monitor
+files and directions: access.log  点击start就会开始indexing 
+
+forwarders之后弄
+
+quiz: The monitor input option will allow u to continuously monitor files ☑️
+
+Splunk uses 【source types】（填空题） to categorize the type of data being indexed. Further Explanation: The source type is the default field for splunk software that assigns to all incoming data. The purpose of source type in splunk software is format the data in indexing, categorise your data for easy searching
+
+In most production environments, 【forwarders】 will be used as the source of data input.
+
+
+
+module 5
+一个search job会持续10分钟 然后重新search
+一个shared search job 会持续7天readable
+
+not or and
+默认and  \" 即可输入引号
+
+quiz： The time stamp u c in the events is based on the time zone set inh your own account
+Commands that create statistics and visualizations are called 【transforming】 commands
+操作优先级 NOT > OR > AND
+
+返回的events 并不是永远按照时间顺序排序的
+
+module 6
+a - string
+# - number 
+
+=! = 全部类型
+> < 之类的智能numerical 
+
+主要注意 (index=web OR index=security) status!=200      2310 events
+        (index=web OR index=security) NOT status=200    21955 events
+        没太看懂意思 大概是说下面的同时包括了type&number不相等的？
+
+Wildcards cannot be used with field searches.
+比如可以status="fail*" 但不可以product* = “SCBF”
+
+module 7 
+index source host sourcetype是在index环节就已经编好号的 每次search不用重新弄了
+
+inclusive > exclusive e.g. access denied 会比搜索 not access granted 快
+
+-30s -30m -30h -30d -30mon -30y
+earlist=01/08/2018 latest=
+
+index for web data / security dta
+
+quiz：
+deperate indexes allows: ability to limit access + multiple retention（=reservation 数据保留政策） policies + faster searches
+@ is the symbol used in "Advanced" section of the time range picker to round down to nearest unit of specified time
+
+module 8 
+search terms: sourcetype=acc*
+commands: stats
+functions(arguments):list(product_name)
+clauses: as 
+
+sourcetype=acc* | states list(product_name) as "game_window"
+shift + 回车 自动换行
+
+username - preferences 可以自动选择search theme 自动补全etc
+
+search | commands
+
+fields command:
+fields status clientip
+fields - status clientip 去掉部分 
+field extraction is one of the most costly parts of searching in splunk
+file inclusion happens before field extraction and can improve performance
+field exclusion happens after field extration. 就只影响结果 对performance没啥影响
+
+table & rename command:
+|table JSESSIONID, product_name, price. 自动生成按照该顺序的表哥
+|rename JSESSIONID as "User Session"
+product_name as "Purchased Game"    price as "Purchase Price" //as 后可不加引号 加了引号也会直接包含引号
+| fields - "User Session" // 这里需要用"User Session"而非JSESSIONID 而且必须要加引号
+需要注意已经rename后 后面的pipelines需要用重命名后的username
+
+dedup command: 减少duplicate
+index=security sourcetype=history* Address_Description="San Francisco"
+| dedup Username // 或 dedup First_Name Last_Name 这样就可以把多次进入大楼的员工名filter掉只显示一次
+| table Username First_Name Last_Name 
+
+
+sort commanbd:
+sourcetype=vendor_sales 
+| table Vendor product_name  sale_price
+| sort - sale_price Vendor //- & fieldname间有空格这样 就全部降序
+| sort -sale_price Vendor  //- & fieldname间没空格这样 就sale_price降序 Vendor照样升序
+
+Lab-正确ans:
+index=main sourcetype=access_combined_wcookie action=purchase status=200 file=success.do//我一开始忘记加了index sourcetype 这俩fieldname 考虑不全面吧 
+| dedup JSESSIONID     //我WA了 一开始dedup加到所有pipe的最后 已经不能dedup了
+| table JSESSIONID      //在只需要JESSIONID的时候 我一开始依然加了field JSESSIONID action status 就很多余
+| rename JSESSIONID as UserSessions
+
+Mod9 - transfer to visulize
+top command(finds the most common values of a given field)
+index=sales sourcetype=vendor_sales
+| top Vendor limit=20 
+top command clauses:
+    limit = int
+    percentfield/countfield/otherstr = string
+    showcount/showperc/showother = True/False
+
+index=sales sourcetype=vendor_sales
+|top product_name by Vendor limit=3 countfield="Number of Sales" showperc=False
+
+rare command(same as top 但显示最少的)
+stats command
+    -count, distinct_count:
+        index=sales sourcetype=vendor_sales
+        | stats count as "Total Sells By Vendors" by product_name, categoryID
+
+        //count(field)用法：
+        index=web sourcetype=access_combined
+        | stats count(action) as ActionEvents, count as "Total Events"// 这样就只有包含action的events会被count
+
+
+    - sum:
+        index=sales sourcetype=vendor_sales
+        |stats count as "Units Sold" 
+        stats sum(price) as "Gross Sales" by product_name
+
+    - average, min, max:
+        index=sales sourcetype=vendor_sales
+        | stats avg(sale_price) as "Average Price"
+            min(sale_price) as "Min Price"
+            max(sale_price) as "Max Price" by categoryID
+
+    - list(显示所有values):
+        index=bcgassets sourcetype=asset_list
+        |stats list(Asset) as "company assets" by Employee
+
+    - values(显示unique values):
+        index=network sourcetype=cisco_wsa_squid
+        | stats values(s_hostname) by cs_username //就可以看到每个员工上班浏览了哪些网站
+
+
+        
