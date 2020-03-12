@@ -8,6 +8,7 @@ Search data are processed by [indexers]
 
 Search strings are sent from the [search heads]
 
+[forwarders] serve as the primary way data is supplied for indexing
 cd /Applications/splunk/bin
 
 ./splunk start or stop or restart or help
@@ -141,7 +142,7 @@ Mod9 - transfer to visulize
 top command(finds the most common values of a given field)
 index=sales sourcetype=vendor_sales
 | top Vendor limit=20 
-top command clauses:
+top command clauses： (默认显示top10)
     limit = int
     percentfield/countfield/otherstr = string
     showcount/showperc/showother = True/False
@@ -179,5 +180,149 @@ stats command
         index=network sourcetype=cisco_wsa_squid
         | stats values(s_hostname) by cs_username //就可以看到每个员工上班浏览了哪些网站
 
+Lab:
+index=main sourcetype="access_combined_wcookie" file=success.do OR file=cart.do status=200  
+//我一开始忘记加status=200 然后在file=success.do OR file=cart.do两侧加了括号 其实不用的 因为NOT>OR>AND
 
-        
+
+
+mod10
+
+index=web sourcetype=access_combined status=200 action=purchase 
+| timechart count as "Units Sold" by product_name usenull=f useother=f
+Format - Legend - Left
+dashboard 就是一堆report一起 更好看  第二次添加search结果 就可以添加到existing dashboard里的panel了
+
+也可以add input(e.g. time range)
+但需要注意 the time range picker will only work on panels with an inline search
+
+可以点击search clone to inline search
+
+lab:
+index=main sourcetype="access_combined_wcookie" status=403 
+| stats count as attempts by clientip
+
+注意直接按照clientip点counts的话 直接count by clientip即可 
+而不是count（clientip） 那是点总共clientip有几个了
+
+我又自己加了一个top_purchase_productID
+index=main sourcetype="access_combined_wcookie" file=success.do status=200 
+| top productId showperc=false
+
+quiz:
+WA的 只有提供了 statistic values 才能view it as a chart
+
+mod11 pivot and datasets
+
+data models: knowledge objects that provide the data structure that drives pivots
+pivot interface to dataset
+
+settings - data models - pivot 
+
+split rows - category
+filters - is not 就相当于 - ***
+
+pivot
+
+statistics - pivot - fiel
+
+
+Datasets summerize fields
+    explore - visulize Splunk Datasets plug on 
+
+quiz: 只有admin/power可以create data models user是不可以的哦(此处WA了）
+
+The instant pivot button is displayed in the statistics and visualizations when a (non-transforming) （此处WA了） search is run.
+
+module 12 lookups
+how to set up a lookup file? 
+    - define a lookup table (比如code200 对应description-suceess)
+        Settings - search - define... choosefile 
+        可以change 查看的 permissions
+        check by | inputlookup http_status.csv
+    - define the lookup
+        Settings - search - lookup tables 
+        http_status  + File-based + http_status.csv 
+            可以选择default matches是否case sentive
+            也可以选择是否time-based
+
+lookup commands:
+index=web sourcetype=access_combined NOT status=200
+| lookup http_status code as status,
+OURPUT code as "HTTP Code", description as "HTTP Description" 这样在fields 里头的 名字也就变了
+但注意lookup的as会有覆盖性 如果不想覆盖existing fields话可以：
+index=web sourcetype=access_combined NOT status=200
+| lookup http_status code as status,
+OURPUTNEW code as "HTTP Code", description as "HTTP Description"
+也可以再加 | table host, "HTTP Code", "HTTP Description" 这样更清楚
+
+automatic lookups：
+
+destination: search 
+name: https_status_lookup
+lookup table: http_status_lookup
+named: access_combined
+lookup input fields code = status
+    code="Code"
+    description="Description"
+
+这样子在search的时候 直接 index=web sourcetype=access_combined NOT status=200
+|table host， "Code"， "Description"
+这样就不用像上面那样 as as as了
+
+additional lookup options:
+populate lookup table with search results
+define lookup based on external script or command.
+use splunk dp connect application
+use geospatial lookups to create queries that can be used to generate choropleth map visualizations
+populate events with KV Store fields
+
+lab:
+我做的时候一开始一直报错 说 inputlookup has to be the first command
+后来才知道不要写index=main etc 直接 search带|的 “| inputlookup products_lookup” 即可 
+
+
+index=main sourcetype="access_combined_wcookie" action=purchase file=success.do status=200
+ | lookup products_lookup productId as productId, OUTPUT product_name as ProductName 
+| stats count by ProductName
+才知道是 lookup "tablename" "ori" as "dest" 这样的格式
+
+automatic lookup 中把price=Price product_name=ProductName 后  🔍时只需要⬇️即可
+index=main sourcetype="access_combined_wcookie"  status=200  file=success.do
+| stats sum("Price") as Revenue by "ProductName" //注意这里"Price" "ProductName" 的引号也可以不加的
+| sort -Revenue  
+
+
+quiz:
+A lookup is categorized as a dataset. True
+
+module13 Scheduled Reports and Alerts
+
+同样的search - save as reports - time range picker 那里选择no
+
+schedule - schedule report 
+为了合理分配硬件资源 可以设置schedule priority 但只有admin能设置 
+也可以设置一个schedule window (e.g. 15min 的含义是 只要在设置时间的15min内run 均可)
+
+Tip: Include a schedule window only if the report doesn't have to start at a specific time and u are ok with the delay.  也可以直接设置成auto
+
+Manage Scheduled Reports:
+    settings: search&report
+    或者直接点击reports
+
+    Edit - Embed进html: [谨慎] anyone with access to the webpage will be able to see the report. 
+    tip： An embedded report will not show data until the scheduled search is run
+        当然一旦embed了 那些参数也就不能修改啦
+
+    也可以edit - add to dashboard
+
+alerts:
+index=web sourcetype=access_combined status=5* 
+save as alert 
+    realtime alerts vs scheduled alerts 前者因为一直跑 对系统负担更大
+Tip: we would like to confirm a problem before sending an alert 比如认为1min内>1次 
+
+final quiz:
+[smart] seach mode toggles(拨动) behavior based on he type of search being run. 
+Data models are made up of [Datasets]
+adding child data model objects is like the [AND] boolean in the splunk search language
